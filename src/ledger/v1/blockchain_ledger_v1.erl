@@ -30,6 +30,7 @@
     htlcs/1,
 
     master_key/1, master_key/2,
+    multi_keys/1, multi_keys/2,
 
     vars/3,
     config/2,  % no version with default, use the set value or fail
@@ -201,6 +202,7 @@
 -define(ELECTION_EPOCH, <<"election_epoch">>).
 -define(OUI_COUNTER, <<"oui_counter">>).
 -define(MASTER_KEY, <<"master_key">>).
+-define(MULTI_KEYS, <<"multi_keys">>).
 -define(VARS_NONCE, <<"vars_nonce">>).
 -define(BURN_RATE, <<"token_burn_exchange_rate">>).
 -define(CURRENT_ORACLE_PRICE, <<"current_oracle_price">>). %% stores the current calculated price
@@ -832,6 +834,23 @@ master_key(Ledger) ->
 master_key(NewKey, Ledger) ->
     DefaultCF = default_cf(Ledger),
     cache_put(Ledger, DefaultCF, ?MASTER_KEY, NewKey).
+
+-spec multi_keys(ledger()) -> {ok, [binary()]} | {error, any()}.
+multi_keys(Ledger) ->
+    DefaultCF = default_cf(Ledger),
+    case cache_get(Ledger, DefaultCF, ?MULTI_KEYS, []) of
+        {ok, MasterKeys} ->
+            {ok, binary_to_term(MasterKeys)};
+        not_found ->
+            {error, not_found};
+        Error ->
+            Error
+    end.
+
+-spec multi_keys([binary()], ledger()) -> ok | {error, any()}.
+multi_keys(NewKeys, Ledger) ->
+    DefaultCF = default_cf(Ledger),
+    cache_put(Ledger, DefaultCF, ?MULTI_KEYS, term_to_binary(NewKeys)).
 
 vars(Vars, Unset, Ledger) ->
     DefaultCF = default_cf(Ledger),
