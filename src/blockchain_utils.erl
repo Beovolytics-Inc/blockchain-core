@@ -27,7 +27,8 @@
     approx_blocks_in_week/1,
     vars_keys_to_list/1,
     calculate_dc_amount/2, calculate_dc_amount/3,
-    deterministic_subset/3
+    deterministic_subset/3,
+    verify_multisig/3
 ]).
 
 -ifdef(TEST).
@@ -348,6 +349,33 @@ deterministic_subset(Limit, RandState, L) ->
     TruncList0 = lists:sublist(lists:sort(FullList), Limit),
     {_, TruncList} = lists:unzip(TruncList0),
     {RandState1, TruncList}.
+
+verify_multisig(Artifact, Sigs, Keys) ->
+    Votes = count_votes(Artifact, Keys, Sigs),
+    Majority = majority(length(Keys)),
+    Votes >= Majority.
+
+count_votes(Artifact, MultiKeys, Proofs) ->
+    count_votes(Artifact, MultiKeys, Proofs, 0).
+
+count_votes(_Artifact, _MultiKeys, [], Acc) ->
+    Acc;
+count_votes(Artifact, MultiKeys, [Proof | Proofs], Acc) ->
+    case lists:filter(
+           fun(Key) ->
+                   libp2p_crypto:verify(Artifact, Proof,
+                                        libp2p_crypto:bin_to_pubkey(Key))
+           end, MultiKeys) of
+        %% proof didn't match any keys
+        [] ->
+            count_votes(Artifact, MultiKeys, Proofs, Acc);
+        [GoodKey] ->
+            count_votes(Artifact, lists:delete(GoodKey, MultiKeys),
+                        Proofs, Acc + 1)
+    end.
+
+majority(N) ->
+    N div 2 + 1.
 
 %% ------------------------------------------------------------------
 %% EUNIT Tests

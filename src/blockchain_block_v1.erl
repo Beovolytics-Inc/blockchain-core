@@ -25,6 +25,7 @@
     is_genesis/1,
     hash_block/1,
     rescue_signature/1,
+    rescue_signatures/1,
     seen_votes/1,
     bba_completion/1,
     snapshot_hash/1,
@@ -153,6 +154,10 @@ signatures(Block) ->
 rescue_signature(Block) ->
     Block#blockchain_block_v1_pb.rescue_signature.
 
+-spec rescue_signatures(block()) -> [binary()].
+rescue_signatures(Block) ->
+    Block#blockchain_block_v1_pb.rescue_signatures.
+
 -spec seen_votes(block()) -> [{pos_integer(), binary()}].
 seen_votes(Block) ->
     [unwrap_vote(V) || V <- Block#blockchain_block_v1_pb.seen_votes].
@@ -251,7 +256,7 @@ verify_signatures(Block, ConsensusMembers, Signatures, Threshold) ->
                         ConsensusMembers::[libp2p_crypto:pubkey_bin()],
                         Signatures::[blockchain_block:signature()],
                         Threshold::pos_integer(),
-                        ignore | binary()
+                        ignore | binary() | [binary()]
                        ) ->
                                false |
                                {true, [{libp2p_crypto:pubkey_bin(), binary()}], boolean()}.
@@ -259,7 +264,11 @@ verify_signatures(Block, ConsensusMembers, Signatures, Threshold) ->
 verify_signatures(#blockchain_block_v1_pb{}=Block, ConsensusMembers, [], _Threshold, Key)
   when ConsensusMembers /= [] -> % force the other path for old tests :/
     EncodedBlock = blockchain_block:serialize(?MODULE:set_signatures(Block, [], <<>>)),
-    RescueSig = blockchain_block_v1:rescue_signature(Block),
+    RescueSig =
+        case is_list(Key) of
+            true -> blockchain_block_v1:rescue_signatures(Block);
+            false -> blockchain_block_v1:rescue_signature(Block)
+        end,
     verify_rescue_signature(EncodedBlock, RescueSig, Key);
 %% normal blocks should never have a rescue signature.
 verify_signatures(Block, ConsensusMembers, Signatures, Threshold, _) ->
@@ -309,6 +318,13 @@ verify_normal_signatures(Artifact, ConsensusMembers, Signatures, Threshold) ->
             false
     end.
 
+verify_rescue_signature(EncodedBlock, RescueSig, Keys) when is_list(Keys) ->
+    case blockchain_util:verify_multisig(EncodedBlock, RescueSig, Keys) of
+        true ->
+            {true, RescueSig, true};
+        false ->
+            false
+    end;
 verify_rescue_signature(EncodedBlock, RescueSig, Key) ->
     case libp2p_crypto:verify(EncodedBlock, RescueSig, libp2p_crypto:bin_to_pubkey(Key)) of
         true ->
