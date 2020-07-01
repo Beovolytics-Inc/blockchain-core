@@ -1,5 +1,7 @@
 -module(blockchain_ledger_snapshot_v1).
 
+-include("blockchain_ledger_snapshot_v1.hrl").
+
 -export([
          serialize/1,
          deserialize/1,
@@ -20,104 +22,6 @@
 %% the right thing for the spots and easy to work around elsewhere.
 -define(min_height, 2).
 
-%% this is temporary, something to work with easily while we nail the
-%% format and functionality down.  once it's final we can move on to a
-%% more permanent and less flexible format, like protobufs, or
-%% cauterize.
-
--record(blockchain_snapshot_v1,
-        {
-         %% meta stuff here
-         previous_snapshot_hash :: binary(),
-         leading_hash :: binary(),
-
-         %% ledger stuff here
-         current_height :: pos_integer(),
-         transaction_fee :: non_neg_integer(),
-         consensus_members :: [libp2p_crypto:pubkey_bin()],
-
-         %% these are updated but never used.  Not sure what to do!
-         election_height :: pos_integer(),
-         election_epoch :: pos_integer(),
-
-         delayed_vars :: [any()],
-         threshold_txns :: [any()],
-
-         master_key :: binary(),
-         vars_nonce :: pos_integer(),
-         vars :: [any()],
-
-         gateways :: [any()],
-         pocs :: [any()],
-
-         accounts :: [any()],
-         dc_accounts :: [any()],
-
-         token_burn_rate :: non_neg_integer(),
-
-         security_accounts :: [any()],
-
-         htlcs :: [any()],
-
-         ouis :: [any()],
-         subnets :: [any()],
-         oui_counter :: pos_integer(),
-
-         hexes :: [any()],
-
-         state_channels :: [any()],
-
-         blocks :: [blockchain_block:block()]
-        }).
-
--record(blockchain_snapshot_v2,
-        {
-         %% meta stuff here
-         previous_snapshot_hash :: binary(),
-         leading_hash :: binary(),
-
-         %% ledger stuff here
-         current_height :: pos_integer(),
-         transaction_fee :: non_neg_integer(),
-         consensus_members :: [libp2p_crypto:pubkey_bin()],
-
-         %% these are updated but never used.  Not sure what to do!
-         election_height :: pos_integer(),
-         election_epoch :: pos_integer(),
-
-         delayed_vars :: [any()],
-         threshold_txns :: [any()],
-
-         master_key :: binary(),
-         vars_nonce :: pos_integer(),
-         vars :: [any()],
-
-         gateways :: [any()],
-         pocs :: [any()],
-
-         accounts :: [any()],
-         dc_accounts :: [any()],
-
-         token_burn_rate :: non_neg_integer(),
-
-         security_accounts :: [any()],
-
-         htlcs :: [any()],
-
-         ouis :: [any()],
-         subnets :: [any()],
-         oui_counter :: pos_integer(),
-
-         hexes :: [any()],
-
-         state_channels :: [any()],
-
-         blocks :: [blockchain_block:block()],
-
-         oracle_price = 0 :: non_neg_integer(),
-         oracle_price_list = [] :: [any()]
-        }).
-
 snapshot(Ledger0, Blocks) ->
     try
         %% TODO: actually verify we're delayed here instead of
@@ -133,13 +37,11 @@ snapshot(Ledger0, Blocks) ->
         {ok, VarsNonce} = blockchain_ledger_v1:vars_nonce(Ledger),
         Vars = blockchain_ledger_v1:snapshot_vars(Ledger),
         Gateways = blockchain_ledger_v1:snapshot_gateways(Ledger),
-        %% need to write these on the ledger side
+
         PoCs = blockchain_ledger_v1:snapshot_pocs(Ledger),
         Accounts = blockchain_ledger_v1:snapshot_accounts(Ledger),
         DCAccounts = blockchain_ledger_v1:snapshot_dc_accounts(Ledger),
         SecurityAccounts = blockchain_ledger_v1:snapshot_security_accounts(Ledger),
-
-        %%{ok, TokenBurnRate} = blockchain_ledger_v1:token_burn_exchange_rate(Ledger),
 
         HTLCs = blockchain_ledger_v1:snapshot_htlcs(Ledger),
 
@@ -155,7 +57,7 @@ snapshot(Ledger0, Blocks) ->
         {ok, OraclePriceList} = blockchain_ledger_v1:current_oracle_price_list(Ledger),
 
         Snapshot =
-            #blockchain_snapshot_v2{
+            #blockchain_snapshot_v3{
                previous_snapshot_hash = <<>>,
                leading_hash = <<>>,
 
@@ -178,9 +80,6 @@ snapshot(Ledger0, Blocks) ->
 
                accounts = Accounts,
                dc_accounts = DCAccounts,
-
-               %%token_burn_rate = TokenBurnRate,
-               token_burn_rate = 0,
 
                security_accounts = SecurityAccounts,
 
@@ -214,15 +113,15 @@ serialize(Snapshot, BlocksP) ->
                         Blocks = lists:map(fun(B) when is_tuple(B) ->
                                                    blockchain_block:serialize(B);
                                               (B) -> B
-                                           end, Snapshot#blockchain_snapshot_v2.blocks),
-                        Snapshot#blockchain_snapshot_v2{blocks = Blocks};
-                    noblocks -> Snapshot#blockchain_snapshot_v2{blocks = []}
+                                           end, Snapshot#blockchain_snapshot_v3.blocks),
+                        Snapshot#blockchain_snapshot_v3{blocks = Blocks};
+                    noblocks -> Snapshot#blockchain_snapshot_v3{blocks = []}
                 end,
     Bin = term_to_binary(Snapshot1, [{compressed, 9}]),
     BinSz = byte_size(Bin),
 
     %% do some simple framing with version, size, & snap
-    Snap = <<2, %% version
+    Snap = <<3, %% version
              BinSz:32/little-unsigned-integer, Bin/binary>>,
     {ok, Snap}.
 
@@ -237,21 +136,33 @@ serialize_v1(Snapshot, noblocks) ->
              BinSz:32/little-unsigned-integer, Bin/binary>>,
     {ok, Snap}.
 
-deserialize(<<1,
-              %%SHASz:16/little-unsigned-integer, SHA:SHASz/binary,
+serialize_v2(Snapshot, noblocks) ->
+    %% NOTE: serialize_v1 only gets called with noblocks
+    Snapshot1 = Snapshot#blockchain_snapshot_v2{blocks = []},
+    Bin = term_to_binary(Snapshot1, [{compressed, 9}]),
+    BinSz = byte_size(Bin),
+
+    %% do some simple framing with version, size, & snap
+    Snap = <<2, %% version
+             BinSz:32/little-unsigned-integer, Bin/binary>>,
+    {ok, Snap}.
+
+deserialize(<<3,
               BinSz:32/little-unsigned-integer, BinSnap:BinSz/binary>>) ->
     try binary_to_term(BinSnap) of
-        OldSnapshot ->
-            Snapshot = v1_to_v2(OldSnapshot),
+        #blockchain_snapshot_v3{} = Snapshot ->
             {ok, Snapshot}
     catch _:_ ->
             {error, bad_snapshot_binary}
     end;
-deserialize(<<2,
-              %%SHASz:16/little-unsigned-integer, SHA:SHASz/binary,
+deserialize(<<_:8,
               BinSz:32/little-unsigned-integer, BinSnap:BinSz/binary>>) ->
     try binary_to_term(BinSnap) of
-        #blockchain_snapshot_v2{} = Snapshot ->
+        #blockchain_snapshot_v1{} = OldSnapshot ->
+            Snapshot = v1_to_v3(OldSnapshot),
+            {ok, Snapshot};
+        #blockchain_snapshot_v2{} = OldSnapshot ->
+            Snapshot = v2_to_v3(OldSnapshot),
             {ok, Snapshot}
     catch _:_ ->
             {error, bad_snapshot_binary}
@@ -259,7 +170,7 @@ deserialize(<<2,
 
 %% sha will be stored externally
 import(Chain, SHA,
-       #blockchain_snapshot_v2{
+       #blockchain_snapshot_v3{
           previous_snapshot_hash = <<>>,
           leading_hash = <<>>,
 
@@ -283,8 +194,6 @@ import(Chain, SHA,
           accounts = Accounts,
           dc_accounts = DCAccounts,
 
-          %%token_burn_rate = TokenBurnRate,
-
           security_accounts = SecurityAccounts,
 
           htlcs = HTLCs,
@@ -303,8 +212,11 @@ import(Chain, SHA,
           oracle_price_list = OraclePriceList
          } = Snapshot) ->
     Dir = blockchain:dir(Chain),
+    %% we should limit how many of these we bother checking?
     case hash(Snapshot) == SHA orelse
-        hash_v1(v2_to_v1(Snapshot)) == SHA of
+        hash_v2(v3_to_v2(Snapshot)) == SHA orelse
+        hash_v1(v3_to_v1(Snapshot)) == SHA
+    of
         true ->
             CLedger = blockchain:ledger(Chain),
             Ledger0 =
@@ -337,8 +249,6 @@ import(Chain, SHA,
                  ok = blockchain_ledger_v1:load_accounts(Accounts, Ledger),
                  ok = blockchain_ledger_v1:load_dc_accounts(DCAccounts, Ledger),
                  ok = blockchain_ledger_v1:load_security_accounts(SecurityAccounts, Ledger),
-
-                 %% ok = blockchain_ledger_v1:token_burn_exchange_rate(TokenBurnRate, Ledger),
 
                  ok = blockchain_ledger_v1:load_htlcs(HTLCs, Ledger),
                  %% add once this is added
@@ -430,10 +340,10 @@ get_blocks(Chain) ->
      end
      || N <- lists:seq(max(?min_height, DHeight - 181), Height)].
 
-height(#blockchain_snapshot_v2{current_height = Height}) ->
+height(#blockchain_snapshot_v3{current_height = Height}) ->
     Height.
 
-hash(#blockchain_snapshot_v2{} = Snap) ->
+hash(#blockchain_snapshot_v3{} = Snap) ->
     {ok, BinSnap} = serialize(Snap, noblocks),
     crypto:hash(sha256, BinSnap).
 
@@ -441,8 +351,11 @@ hash_v1(#blockchain_snapshot_v1{} = Snap) ->
     {ok, BinSnap} = serialize_v1(Snap, noblocks),
     crypto:hash(sha256, BinSnap).
 
+hash_v2(#blockchain_snapshot_v2{} = Snap) ->
+    {ok, BinSnap} = serialize_v2(Snap, noblocks),
+    crypto:hash(sha256, BinSnap).
 
-v1_to_v2(#blockchain_snapshot_v1{
+v1_to_v3(#blockchain_snapshot_v1{
             previous_snapshot_hash = <<>>,
             leading_hash = <<>>,
 
@@ -466,8 +379,6 @@ v1_to_v2(#blockchain_snapshot_v1{
             accounts = Accounts,
             dc_accounts = DCAccounts,
 
-            %%token_burn_rate = TokenBurnRate,
-
             security_accounts = SecurityAccounts,
 
             htlcs = HTLCs,
@@ -482,7 +393,7 @@ v1_to_v2(#blockchain_snapshot_v1{
 
             blocks = Blocks
            }) ->
-    #blockchain_snapshot_v2{
+    #blockchain_snapshot_v3{
        previous_snapshot_hash = <<>>,
        leading_hash = <<>>,
 
@@ -506,9 +417,6 @@ v1_to_v2(#blockchain_snapshot_v1{
        accounts = Accounts,
        dc_accounts = DCAccounts,
 
-       %%token_burn_rate = TokenBurnRate,
-       token_burn_rate = 0,
-
        security_accounts = SecurityAccounts,
 
        htlcs = HTLCs,
@@ -522,9 +430,92 @@ v1_to_v2(#blockchain_snapshot_v1{
        state_channels = StateChannels,
 
        blocks = Blocks
+     }.
+
+v2_to_v3(#blockchain_snapshot_v2{
+            previous_snapshot_hash = <<>>,
+            leading_hash = <<>>,
+
+            current_height = CurrHeight,
+            transaction_fee = _TxnFee,
+            consensus_members = ConsensusMembers,
+
+            election_height = ElectionHeight,
+            election_epoch = ElectionEpoch,
+
+            delayed_vars = DelayedVars,
+            threshold_txns = ThresholdTxns,
+
+            master_key = MasterKey,
+            vars_nonce = VarsNonce,
+            vars = Vars,
+
+            gateways = Gateways,
+            pocs = PoCs,
+
+            accounts = Accounts,
+            dc_accounts = DCAccounts,
+
+            security_accounts = SecurityAccounts,
+
+            htlcs = HTLCs,
+
+            ouis = OUIs,
+            subnets = Subnets,
+            oui_counter = OUICounter,
+
+            hexes = Hexes,
+
+            state_channels = StateChannels,
+
+            blocks = Blocks,
+
+            oracle_price = OraclePrice,
+            oracle_price_list = OraclePriceList
+           }) ->
+    #blockchain_snapshot_v3{
+       previous_snapshot_hash = <<>>,
+       leading_hash = <<>>,
+
+       current_height = CurrHeight,
+       transaction_fee = 0,
+       consensus_members = ConsensusMembers,
+
+       election_height = ElectionHeight,
+       election_epoch = ElectionEpoch,
+
+       delayed_vars = DelayedVars,
+       threshold_txns = ThresholdTxns,
+
+       master_key = MasterKey,
+       vars_nonce = VarsNonce,
+       vars = Vars,
+
+       gateways = Gateways,
+       pocs = PoCs,
+
+       accounts = Accounts,
+       dc_accounts = DCAccounts,
+
+       security_accounts = SecurityAccounts,
+
+       htlcs = HTLCs,
+
+       ouis = OUIs,
+       subnets = Subnets,
+       oui_counter = OUICounter,
+
+       hexes = Hexes,
+
+       state_channels = StateChannels,
+
+       blocks = Blocks,
+
+       oracle_price = OraclePrice,
+       oracle_price_list = OraclePriceList
       }.
 
-v2_to_v1(#blockchain_snapshot_v2{
+v3_to_v1(#blockchain_snapshot_v3{
             previous_snapshot_hash = <<>>,
             leading_hash = <<>>,
 
@@ -547,8 +538,6 @@ v2_to_v1(#blockchain_snapshot_v2{
 
             accounts = Accounts,
             dc_accounts = DCAccounts,
-
-            %%token_burn_rate = TokenBurnRate,
 
             security_accounts = SecurityAccounts,
 
@@ -588,7 +577,6 @@ v2_to_v1(#blockchain_snapshot_v2{
        accounts = Accounts,
        dc_accounts = DCAccounts,
 
-       %%token_burn_rate = TokenBurnRate,
        token_burn_rate = 0,
 
        security_accounts = SecurityAccounts,
@@ -606,8 +594,93 @@ v2_to_v1(#blockchain_snapshot_v2{
        blocks = Blocks
       }.
 
+v3_to_v2(#blockchain_snapshot_v3{
+            previous_snapshot_hash = <<>>,
+            leading_hash = <<>>,
+
+            current_height = CurrHeight,
+            transaction_fee =  _TxnFee,
+            consensus_members = ConsensusMembers,
+
+            election_height = ElectionHeight,
+            election_epoch = ElectionEpoch,
+
+            delayed_vars = DelayedVars,
+            threshold_txns = ThresholdTxns,
+
+            master_key = MasterKey,
+            vars_nonce = VarsNonce,
+            vars = Vars,
+
+            gateways = Gateways,
+            pocs = PoCs,
+
+            accounts = Accounts,
+            dc_accounts = DCAccounts,
+
+            security_accounts = SecurityAccounts,
+
+            htlcs = HTLCs,
+
+            ouis = OUIs,
+            subnets = Subnets,
+            oui_counter = OUICounter,
+
+            hexes = Hexes,
+
+            state_channels = StateChannels,
+
+            blocks = Blocks,
+
+            oracle_price = OraclePrice,
+            oracle_price_list = OraclePriceList
+           }) ->
+    #blockchain_snapshot_v2{
+       previous_snapshot_hash = <<>>,
+       leading_hash = <<>>,
+
+       current_height = CurrHeight,
+       transaction_fee =  0,
+       consensus_members = ConsensusMembers,
+
+       election_height = ElectionHeight,
+       election_epoch = ElectionEpoch,
+
+       delayed_vars = DelayedVars,
+       threshold_txns = ThresholdTxns,
+
+       master_key = MasterKey,
+       vars_nonce = VarsNonce,
+       vars = Vars,
+
+       gateways = Gateways,
+       pocs = PoCs,
+
+       accounts = Accounts,
+       dc_accounts = DCAccounts,
+
+       token_burn_rate = 0,
+
+       security_accounts = SecurityAccounts,
+
+       htlcs = HTLCs,
+
+       ouis = OUIs,
+       subnets = Subnets,
+       oui_counter = OUICounter,
+
+       hexes = Hexes,
+
+       state_channels = StateChannels,
+
+       blocks = Blocks,
+
+       oracle_price = OraclePrice,
+       oracle_price_list = OraclePriceList
+      }.
+
 diff(A, B) ->
-    Fields = record_info(fields, blockchain_snapshot_v2),
+    Fields = record_info(fields, blockchain_snapshot_v3),
     [_ | AL] = tuple_to_list(A),
     [_ | BL] = tuple_to_list(B),
     Comp = lists:zip3(Fields, AL, BL),
