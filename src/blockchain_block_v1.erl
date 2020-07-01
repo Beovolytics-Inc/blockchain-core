@@ -188,6 +188,10 @@ set_signatures(Block, Signatures) ->
 
 -spec set_signatures(block(), [blockchain_block:signature()], binary()) ->
                             block().
+set_signatures(Block, Signatures, RescueList) when is_list(RescueList) ->
+    Block#blockchain_block_v1_pb{signatures = [wrap_signature(S)
+                                               || S <- Signatures],
+                                 rescue_signatures = RescueList};
 set_signatures(Block, Signatures, Rescue) ->
     Block#blockchain_block_v1_pb{signatures = [wrap_signature(S)
                                                || S <- Signatures],
