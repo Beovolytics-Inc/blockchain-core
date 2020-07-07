@@ -323,7 +323,7 @@ verify_normal_signatures(Artifact, ConsensusMembers, Signatures, Threshold) ->
     end.
 
 verify_rescue_signature(EncodedBlock, RescueSig, Keys) when is_list(Keys) ->
-    case blockchain_util:verify_multisig(EncodedBlock, RescueSig, Keys) of
+    case blockchain_utils:verify_multisig(EncodedBlock, RescueSig, Keys) of
         true ->
             {true, RescueSig, true};
         false ->
