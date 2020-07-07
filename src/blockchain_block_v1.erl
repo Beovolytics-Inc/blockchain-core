@@ -186,7 +186,7 @@ hbbft_round(Block) ->
 set_signatures(Block, Signatures) ->
     Block#blockchain_block_v1_pb{signatures=[wrap_signature(S) || S <- Signatures]}.
 
--spec set_signatures(block(), [blockchain_block:signature()], binary()) ->
+-spec set_signatures(block(), [blockchain_block:signature()], binary() | [binary()]) ->
                             block().
 set_signatures(Block, Signatures, RescueList) when is_list(RescueList) ->
     Block#blockchain_block_v1_pb{signatures = [wrap_signature(S)
@@ -267,7 +267,11 @@ verify_signatures(Block, ConsensusMembers, Signatures, Threshold) ->
 %% rescue blocks have no signatures and a rescue signature.
 verify_signatures(#blockchain_block_v1_pb{}=Block, ConsensusMembers, [], _Threshold, Key)
   when ConsensusMembers /= [] -> % force the other path for old tests :/
-    EncodedBlock = blockchain_block:serialize(?MODULE:set_signatures(Block, [], <<>>)),
+    EncodedBlock =
+        case is_list(Key) of
+            true -> blockchain_block:serialize(?MODULE:set_signatures(Block, [], []));
+            false -> blockchain_block:serialize(?MODULE:set_signatures(Block, [], <<>>))
+        end,
     RescueSig =
         case is_list(Key) of
             true -> blockchain_block_v1:rescue_signatures(Block);
@@ -322,10 +326,10 @@ verify_normal_signatures(Artifact, ConsensusMembers, Signatures, Threshold) ->
             false
     end.
 
-verify_rescue_signature(EncodedBlock, RescueSig, Keys) when is_list(Keys) ->
-    case blockchain_utils:verify_multisig(EncodedBlock, RescueSig, Keys) of
+verify_rescue_signature(EncodedBlock, RescueSigs, Keys) when is_list(Keys) ->
+    case blockchain_utils:verify_multisig(EncodedBlock, RescueSigs, Keys) of
         true ->
-            {true, RescueSig, true};
+            {true, RescueSigs, true};
         false ->
             false
     end;
@@ -340,7 +344,8 @@ verify_rescue_signature(EncodedBlock, RescueSig, Key) ->
 -spec is_rescue_block(block()) -> boolean().
 is_rescue_block(Block) ->
     Block#blockchain_block_v1_pb.signatures == [] andalso
-        Block#blockchain_block_v1_pb.rescue_signature /= <<>>.
+        (Block#blockchain_block_v1_pb.rescue_signature /= <<>> orelse
+         Block#blockchain_block_v1_pb.rescue_signatures /= []).
 
 -spec to_json(block(), blockchain_json:opts()) -> blockchain_json:json_object().
 to_json(Block, _Opts) ->
