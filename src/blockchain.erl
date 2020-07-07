@@ -729,7 +729,10 @@ can_add_block(Block, Blockchain) ->
                                     {ok, KeyOrKeys} =
                                         case blockchain:config(?use_multi_keys, Ledger) of
                                             {ok, true} ->
-                                                blockchain_ledger_v1:multi_keys(Ledger);
+                                                case blockchain_ledger_v1:multi_keys(Ledger) of
+                                                    {ok, _} = OK -> OK;
+                                                    _ -> blockchain_ledger_v1:master_key(Ledger)
+                                                end;
                                             _ ->
                                                 blockchain_ledger_v1:master_key(Ledger)
                                         end,
@@ -2002,7 +2005,10 @@ is_block_plausible(Block, Chain) ->
                     {ok, KeyOrKeys} =
                         case blockchain:config(?use_multi_keys, Ledger) of
                             {ok, true} ->
-                                blockchain_ledger_v1:multi_keys(Ledger);
+                                case blockchain_ledger_v1:multi_keys(Ledger) of
+                                    {ok, _} = OK -> OK;
+                                    _ -> blockchain_ledger_v1:master_key(Ledger)
+                                end;
                             _ ->
                                 blockchain_ledger_v1:master_key(Ledger)
                         end,
