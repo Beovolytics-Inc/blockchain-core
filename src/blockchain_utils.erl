@@ -25,7 +25,8 @@
     bitvector_to_map/2,
     get_pubkeybin_sigfun/1,
     approx_blocks_in_week/1,
-    vars_keys_to_list/1,
+    keys_list_to_bin/1,
+    bin_keys_to_list/1,
     calculate_dc_amount/2, calculate_dc_amount/3,
     deterministic_subset/3,
     verify_multisig/3
@@ -321,7 +322,7 @@ approx_blocks_in_week(Ledger) ->
             10000
     end.
 
--spec vars_keys_to_list( Data :: binary() ) -> [ binary() ].
+-spec bin_keys_to_list( Data :: binary() ) -> [ binary() ].
 %% @doc Price oracle public keys and also staking keys are encoded like this
 %% <code>
 %% <<KeyLen1/integer, Key1/binary, KeyLen2/integer, Key2/binary, ...>>
@@ -329,9 +330,19 @@ approx_blocks_in_week(Ledger) ->
 %% This function takes the length tagged binary keys, removes the length tag
 %% and returns a list of binary keys
 %% @end
-vars_keys_to_list(Data) when is_binary(Data) ->
+bin_keys_to_list(Data) when is_binary(Data) ->
     [ Key || << Len:8/unsigned-integer, Key:Len/binary >> <= Data ].
 
+-spec keys_list_to_bin( [binary()] ) -> binary().
+%% @doc Price oracle public keys and also staking keys are encoded like this
+%% <code>
+%% <<KeyLen1/integer, Key1/binary, KeyLen2/integer, Key2/binary, ...>>
+%% </code>
+%% This function takes the length tagged binary keys, removes the length tag
+%% and returns a list of binary keys
+%% @end
+keys_list_to_bin(Keys) ->
+    << <<(byte_size(Key)):8/integer, Key/binary>> || Key <- Keys >>.
 
 %%--------------------------------------------------------------------
 %% @doc deterministic random subset from a random seed
@@ -438,8 +449,8 @@ oracle_keys_test() ->
     #{ public := RawEdPK } = libp2p_crypto:generate_keys(ed25519),
     EccPK = libp2p_crypto:pubkey_to_bin(RawEccPK),
     EdPK = libp2p_crypto:pubkey_to_bin(RawEdPK),
-    TestOracleKeys = << <<(byte_size(Key)):8/integer, Key/binary>> || Key <- [EccPK, EdPK] >>,
-    Results = vars_keys_to_list(TestOracleKeys),
+    TestOracleKeys = keys_list_to_bin([EccPK, EdPK]),
+    Results = bin_keys_to_list(TestOracleKeys),
     ?assertEqual([EccPK, EdPK], Results),
     Results1 = [ libp2p_crypto:bin_to_pubkey(K) || K <- Results ],
     ?assertEqual([RawEccPK, RawEdPK], Results1).

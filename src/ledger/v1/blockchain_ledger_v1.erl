@@ -839,8 +839,8 @@ master_key(NewKey, Ledger) ->
 multi_keys(Ledger) ->
     DefaultCF = default_cf(Ledger),
     case cache_get(Ledger, DefaultCF, ?MULTI_KEYS, []) of
-        {ok, MasterKeys} ->
-            {ok, binary_to_term(MasterKeys)};
+        {ok, MultiKeysBin} ->
+            {ok, blockchain_utils:bin_keys_to_list(MultiKeysBin)};
         not_found ->
             {error, not_found};
         Error ->
@@ -850,7 +850,7 @@ multi_keys(Ledger) ->
 -spec multi_keys([binary()], ledger()) -> ok | {error, any()}.
 multi_keys(NewKeys, Ledger) ->
     DefaultCF = default_cf(Ledger),
-    cache_put(Ledger, DefaultCF, ?MULTI_KEYS, term_to_binary(NewKeys)).
+    cache_put(Ledger, DefaultCF, ?MULTI_KEYS, blockchain_utils:keys_list_to_bin(NewKeys)).
 
 vars(Vars, Unset, Ledger) ->
     DefaultCF = default_cf(Ledger),
@@ -1477,7 +1477,7 @@ maybe_gc_scs(Ledger) ->
 staking_keys(Ledger)->
     case blockchain:config(?staking_keys, Ledger) of
         {error, not_found} -> not_found;
-        {ok, V} -> blockchain_utils:vars_keys_to_list(V)
+        {ok, V} -> blockchain_utils:bin_keys_to_list(V)
     end.
 
 %%--------------------------------------------------------------------
@@ -1640,7 +1640,7 @@ recalc_price(LastPrice, BlockT, _DefaultCF, Ledger) ->
     {ok, Prices} = current_oracle_price_list(Ledger),
     NewPriceList = trim_price_list(EndScan, Prices),
     {ok, RawOracleKeys} = blockchain:config(?price_oracle_public_keys, Ledger),
-    Maximum = length(blockchain_utils:vars_keys_to_list(RawOracleKeys)),
+    Maximum = length(blockchain_utils:bin_keys_to_list(RawOracleKeys)),
     Minimum = (Maximum div 2) + 1,
 
     ValidPrices = lists:foldl(

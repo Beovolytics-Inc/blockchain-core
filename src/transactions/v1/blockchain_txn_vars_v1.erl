@@ -654,7 +654,7 @@ validate_float(Value, Name, Min, Max) ->
     end.
 
 validate_oracle_public_keys_format(Str) when is_binary(Str) ->
-    PubKeys = blockchain_utils:vars_keys_to_list(Str),
+    PubKeys = blockchain_utils:bin_keys_to_list(Str),
     validate_oracle_keys(PubKeys).
 
 validate_oracle_keys([]) -> ok;
@@ -668,7 +668,7 @@ validate_oracle_keys([H|T]) ->
     end.
 
 validate_staking_keys_format(Str) when is_binary(Str) ->
-    PubKeys = blockchain_utils:vars_keys_to_list(Str),
+    PubKeys = blockchain_utils:bin_keys_to_list(Str),
     validate_staking_keys(PubKeys).
 
 validate_staking_keys([]) -> ok;
