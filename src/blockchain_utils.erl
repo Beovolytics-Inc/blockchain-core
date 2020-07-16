@@ -365,9 +365,10 @@ verify_multisig(Artifact, Sigs, Keys) ->
     lager:debug("sigs ~p keys ~p", [Sigs, Keys]),
     Votes = count_votes(Artifact, Keys, Sigs),
     %% this is safe because keys comes out of the ledger
-    Majority = majority(length(Keys)),
-    lager:debug("votes ~p, majority: ~p", [Votes, Majority]),
-    Votes >= Majority.
+    %% Majority = majority(length(Keys)),
+    %% lager:debug("votes ~p, majority: ~p", [Votes, Majority]),
+    %% this is safe because keys comes out of the ledger
+    Votes == length(Keys).
 
 count_votes(Artifact, MultiKeys, Proofs) ->
     count_votes(Artifact, MultiKeys, Proofs, 0).
@@ -388,8 +389,8 @@ count_votes(Artifact, MultiKeys, [Proof | Proofs], Acc) ->
                         Proofs, Acc + 1)
     end.
 
-majority(N) ->
-    N div 2 + 1.
+%% majority(N) ->
+%%     N div 2 + 1.
 
 %% ------------------------------------------------------------------
 %% EUNIT Tests
