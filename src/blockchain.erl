@@ -2006,7 +2006,7 @@ is_block_plausible(Block, Chain) ->
                         case blockchain:config(?use_multi_keys, Ledger) of
                             {ok, true} ->
                                 case blockchain_ledger_v1:multi_keys(Ledger) of
-                                    {ok, _} = OK -> OK;
+                                    {ok, _} = Result -> Result;
                                     _ -> blockchain_ledger_v1:master_key(Ledger)
                                 end;
                             _ ->
