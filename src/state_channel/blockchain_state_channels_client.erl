@@ -750,23 +750,8 @@ is_overspent_sc(SC, State=#state{chain=Chain}) ->
             lists:any(fun(E) -> blockchain_ledger_v1:is_state_channel_overpaid(E, Ledger) end, [SC|KnownSCs])
     end.
 
-get_previous_total_dcs(SC, State) ->
-    SCID = blockchain_state_channel_v1:id(SC),
-
-    case get_state_channels(SCID, State) of
-        {error, not_found} -> 0;
-        {error, _} ->
-            lager:error("rocks blew up"),
-            0;
-        {ok, [PreviousSC]} ->
-            blockchain_state_channel_v1:total_dcs(PreviousSC);
-        {ok, PrevSCs} ->
-            lager:error("multiple copies of state channels for id: ~p, returning current total",
-                        [PrevSCs]),
-            %% returning this value will cause the test that we got paid to fail
-            %% and the packet will get re-enqueued.
-            blockchain_state_channel_v1:total_dcs(SC)
-    end.
+get_previous_total_dcs(_SC, _State) ->
+    0.
 
 %% ------------------------------------------------------------------
 %% DB functions
