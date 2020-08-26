@@ -732,27 +732,8 @@ is_active_sc(SC, #state{chain=Chain}) ->
 
 -spec is_causally_correct_sc(SC :: blockchain_state_channel_v1:state_channel(),
                              State :: state()) -> boolean().
-is_causally_correct_sc(SC, State) ->
-    SCID = blockchain_state_channel_v1:id(SC),
-
-    case get_state_channels(SCID, State) of
-        {error, not_found} ->
-            true;
-        {error, _} ->
-            lager:error("rocks blew up"),
-            %% rocks blew up
-            false;
-        {ok, [KnownSC]} ->
-            %% Check if SC is causally correct
-            Check = (caused == blockchain_state_channel_v1:compare_causality(KnownSC, SC) orelse
-                     equal == blockchain_state_channel_v1:compare_causality(KnownSC, SC)),
-            lager:info("causality check: ~p, this sc: ~p, known_sc: ~p", [Check, SC, KnownSC]),
-            Check;
-        {ok, KnownSCs} ->
-            lager:error("multiple copies of state channels for id: ~p, found: ~p", [SCID, KnownSCs]),
-            %% We have a conflict among incoming state channels
-            false
-    end.
+is_causally_correct_sc(_SC, _State) ->
+  true.
 
 is_overspent_sc(SC, State=#state{chain=Chain}) ->
     SCID = blockchain_state_channel_v1:id(SC),
